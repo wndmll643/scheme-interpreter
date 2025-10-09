@@ -23,7 +23,7 @@ typedef struct TokenStream {
     void reset() { pos = 0; }
 } TokenStream;
 
-void tokenize_line(const std::string& line, TokenStream& ts);
+void tokenize_line(const std::string& line, TokenStream& ts, HashTable& ht, NodeArray& na);
 
 int parse_and_build(TokenStream& ts, HashTable& ht, NodeArray& na);
 
