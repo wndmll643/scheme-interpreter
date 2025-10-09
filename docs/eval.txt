@@ -1,0 +1,5 @@
+    for (size_t j = 0; j < new_size; ++j) {
+        if (new_table[j].lchild != "" && new_table[j].rchild < 0) {
+            new_table[j].rchild = remap_symbol_index(new_table[j].rchild, entry_map, old_size);
+        }
+    }
