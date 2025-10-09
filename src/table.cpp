@@ -9,12 +9,14 @@ static std::string _normalize(std::string s) {
 }
 
 static inline int remap_symbol_index(int index, const int* entry_map, size_t old_size) {
-    if (index >= 0) return index;
-    int old_entry = -index - 1;
+    // std::printf("remap_symbol_index called with index: %d\n", index);
+    if (index > 0) return index;
+    int old_entry = -index;
     if (old_entry < 0 || (size_t)old_entry >= old_size) return index;
     int new_entry = entry_map[old_entry];
+    // std::printf("  old_entry: %d, new_entry: %d\n", old_entry, new_entry);
     if (new_entry < 0) return index;
-    return -(new_entry + 1);
+    return -(new_entry);
 }
 
 int _hash(const std::string& str, size_t table_size) {
@@ -116,7 +118,8 @@ HashTable::HashTable(size_t size)
 : size_of_table(size), table(nullptr)
 {
     table = new hash_node_t[size_of_table];
-    for (size_t i = 0; i < size_of_table; ++i) {
+    table[0].lchild = "()"; table[0].rchild = 0;
+    for (size_t i = 1; i < size_of_table; ++i) {
         table[i].lchild = "";
         table[i].rchild = 0;
     }
@@ -169,6 +172,7 @@ void HashTable::insert(const std::string& key, int index, NodeArray* na) {
 
 int HashTable::intern(const std::string& key, NodeArray* na) {
     std::string norm = _normalize(key);
+    // std::printf("intern called with key: '%s', normalized: '%s'\n", key.c_str(), norm.c_str());
     int start = _hash(norm, size_of_table);
     int entry  = search(norm, start);
     if (entry < 0) {
@@ -185,7 +189,7 @@ int HashTable::intern(const std::string& key, NodeArray* na) {
 }
 
 const std::string* HashTable::nameByIndex(int index) const {
-    if (index >= 0) return nullptr;
+    if (index > 0) return nullptr;
     int entry = entryFromIndex(index);
     // std::printf("nameByIndex called with index: %d, entry: %d\n", index, entry);
     if ((size_t)entry >= size_of_table) return nullptr;
@@ -200,8 +204,10 @@ void HashTable::doubleSize(NodeArray* na) {
     for (size_t i = 0; i < new_size; ++i) { new_table[i].lchild = ""; new_table[i].rchild = 0; }
 
     int* entry_map = new int[old_size];
-    for (size_t i = 0; i < old_size; ++i) entry_map[i] = -1;
+    entry_map[0] = 0;
+    for (size_t i = 1; i < old_size; ++i) entry_map[i] = -1;
 
+    new_table[0].lchild = "()"; new_table[0].rchild = 0;
     for (size_t i = 1; i < old_size; ++i) {
         if (table[i].lchild != "") {
             const std::string& s = table[i].lchild;
@@ -217,6 +223,7 @@ void HashTable::doubleSize(NodeArray* na) {
             }
             new_table[insert_j].lchild = s;
             new_table[insert_j].rchild = table[i].rchild;
+            // printf("Rehashed '%s' from index %zu to new index %d\n", s.c_str(), i, insert_j);
             entry_map[i] = insert_j;
         }
     }
@@ -227,6 +234,8 @@ void HashTable::doubleSize(NodeArray* na) {
         for (size_t i = 1; i < nsz; ++i) {
             if (nt[i].lchild < 0) {
                 nt[i].lchild = remap_symbol_index(nt[i].lchild, entry_map, old_size);
+                // int temp = remap_symbol_index(nt[i].lchild, entry_map, old_size);
+
             }
         }
     }
@@ -241,9 +250,9 @@ void HashTable::doubleSize(NodeArray* na) {
 void HashTable::printTable() const {
     std::printf("Hash table =\n");
     for (size_t i = 0; i < size_of_table; ++i) {
-        if (i == 0) {
-            std::printf("[idx=%zu] hash=%d symbol=%s body=%d\n", i, 0, table[i].lchild.c_str(), table[i].rchild);
-        }
+        // if (i == 0) {
+        //     std::printf("[idx=%zu] hash=%d symbol=%s body=%d\n", i, 0, table[i].lchild.c_str(), table[i].rchild);
+        // }
         if (table[i].lchild != "") {
             int raw = _hash(table[i].lchild, (int)size_of_table);
             std::printf("[idx=%zu] hash=%d symbol=%s body=%d\n", i, raw, table[i].lchild.c_str(), table[i].rchild);

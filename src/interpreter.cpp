@@ -7,6 +7,9 @@ int main() {
     HashTable* ht = _init_HashTable(31);
     NodeArray* na = _init_NodeArray(31);
 
+    // ht->printTable();
+    // std::printf("\n");
+
     std::string line;
     while (true) {
         std::printf("> ");
@@ -15,7 +18,7 @@ int main() {
         if (line == "exit") break;
 
         TokenStream ts;
-        tokenize_line(line, ts, *ht, *na);
+        tokenize_line(line, ts, *ht);
         int root = parse_and_build(ts, *ht, *na);
         std::printf("] ");
         PRINT(root, *ht, *na);

@@ -9,6 +9,7 @@ static inline std::string _normalize(std::string s) {
 }
 
 static inline void flush_symbol(std::string& cur, TokenStream& ts) {
+    // std::printf("flush_symbol called with cur: '%s'\n", cur.c_str());
     if (!cur.empty() && ts.count < 512) {
         ts.toks[ts.count].kind   = TK_SYMBOL;
         ts.toks[ts.count].lexeme = _normalize(cur);
@@ -17,23 +18,23 @@ static inline void flush_symbol(std::string& cur, TokenStream& ts) {
     }
 }
 
-void tokenize_line(const std::string& line, TokenStream& ts, HashTable& ht, NodeArray& na) {
+void tokenize_line(const std::string& line, TokenStream& ts, HashTable& ht) {
     ts.clear();
     std::string cur;
 
     const int N = (int)line.size();
     for (int i = 0; i < N; ++i) {
         const char c = line[i];
-        int left_paren = ht.intern("(", &na);
-        int right_paren = ht.intern(")", &na);
-        if (ht.intern(std::string(1, c), &na) == left_paren) {
+        int left_paren = ht.search("(", 0);
+        int right_paren = ht.search(")", 0);
+        if (ht.search(std::string(1, c), 0) == left_paren) {
             flush_symbol(cur, ts);
             if (ts.count < 512) {
                 ts.toks[ts.count].kind = TK_LPAREN;
                 ts.toks[ts.count].lexeme = "(";
                 ++ts.count;
             }
-        } else if (ht.intern(std::string(1, c), &na) == right_paren) {
+        } else if (ht.search(std::string(1, c), 0) == right_paren) {
             // std::printf("cur %s\n", cur.c_str());
             flush_symbol(cur, ts);
             if (ts.count < 512) {
@@ -64,7 +65,9 @@ static int parse_expr(TokenStream& ts, HashTable& ht, NodeArray& na) {
         (void)ts.next();
         return 0;
     } else {
+        // std::printf("parse_expr called with token: %s\n", t.lexeme.c_str());
         int index = ht.intern(t.lexeme, &na);
+        // std::printf("Interned '%s' to index %d\n", t.lexeme.c_str(), index);
         (void)ts.next();
         return index;
     }
