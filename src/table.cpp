@@ -10,11 +10,11 @@ static std::string _normalize(std::string s) {
 
 static inline int remap_symbol_index(int index, const int* entry_map, size_t old_size) {
     if (index >= 0) return index;
-    int old_entry = -index - 1;
+    int old_entry = -index;
     if (old_entry < 0 || (size_t)old_entry >= old_size) return index;
     int new_entry = entry_map[old_entry];
     if (new_entry < 0) return index;
-    return -(new_entry + 1);
+    return -(new_entry);
 }
 
 int _hash(const std::string& str, size_t table_size) {
@@ -116,6 +116,8 @@ HashTable::HashTable(size_t size)
 : size_of_table(size), table(nullptr)
 {
     table = new hash_node_t[size_of_table];
+    table[0].lchild = "()";
+    table[0].rchild = 0;
     for (size_t i = 0; i < size_of_table; ++i) {
         table[i].lchild = "";
         table[i].rchild = 0;
@@ -202,6 +204,9 @@ void HashTable::doubleSize(NodeArray* na) {
     int* entry_map = new int[old_size];
     for (size_t i = 0; i < old_size; ++i) entry_map[i] = -1;
 
+    new_table[0].lchild = "()";
+    new_table[0].rchild = 0;
+
     for (size_t i = 1; i < old_size; ++i) {
         if (table[i].lchild != "") {
             const std::string& s = table[i].lchild;
@@ -241,12 +246,12 @@ void HashTable::doubleSize(NodeArray* na) {
 void HashTable::printTable() const {
     std::printf("Hash table =\n");
     for (size_t i = 0; i < size_of_table; ++i) {
-        if (i == 0) {
-            std::printf("[idx=%zu] hash=%d symbol=%s body=%d\n", i, 0, table[i].lchild.c_str(), table[i].rchild);
-        }
+        // if (i == 0) {
+        //     std::printf("[idx=%zu] hash=%d symbol=%s body=%d\n", i, 0, table[i].lchild.c_str(), table[i].rchild);
+        // }
         if (table[i].lchild != "") {
             int raw = _hash(table[i].lchild, (int)size_of_table);
-            std::printf("[idx=%zu] hash=%d symbol=%s body=%d\n", i, raw, table[i].lchild.c_str(), table[i].rchild);
+            std::printf("[idx=-%zu] initial hash value=%d symbol=%s\n", i, raw, table[i].lchild.c_str());
         }
     }
 }
