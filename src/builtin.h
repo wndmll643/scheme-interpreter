@@ -10,6 +10,6 @@ const std::string built_in_functions[] = {
     "display", "reverse", "length", "max",
     "floor", "ceiling", "define", "cond",
     "and", "or", "if", "else",
-    "(", ")"
+    "(", ")", "quote", "lambda"
 };
 #endif

@@ -8,7 +8,7 @@ SRCS := $(wildcard $(SRC_DIR)/*.cpp)
 OBJS := $(SRCS:$(SRC_DIR)/%.cpp=$(BUILD_DIR)/%.o)
 TARGET := interpreter
 
-.PHONY: all clean
+.PHONY: all clean debug
 
 all: $(TARGET)
 
@@ -20,6 +20,9 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp | $(BUILD_DIR)
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
+
+debug: CXXFLAGS := -std=gnu++11 -O0 -g -Wall -Wextra -Isrc -DDEBUG_PREPROCESS=1
+debug: clean $(TARGET)
 
 clean:
 	rm -rf $(BUILD_DIR)/*

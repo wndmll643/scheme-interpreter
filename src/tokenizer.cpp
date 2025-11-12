@@ -1,6 +1,9 @@
 #include "tokenizer.h"
 #include <cctype>
 #include <cstdio>
+#ifndef DEBUG_PREPROCESS
+#define DEBUG_PREPROCESS 0
+#endif
 
 static inline std::string _normalize(std::string s) {
     for (char& c : s) c = (char)std::tolower((unsigned char)c);
@@ -16,6 +19,189 @@ static inline void flush_symbol(std::string& cur, TokenStream& ts) {
         cur.clear();
     }
 }
+
+static void expand_form(TokenStream& in, Out& out);
+static bool expand_single_quote_token_if_any(TokenStream& in, Out& out);
+static bool expand_leading_quotes_if_any(TokenStream& in, Out& out);
+static void expand_define_sugar(TokenStream& in, Out& out);
+
+static void expand_form(TokenStream& in, Out& out) {
+    if (!in.hasMore()) return;
+
+    // 1) 단독 quote
+    if (expand_single_quote_token_if_any(in, out)) return;
+
+    // 2) 붙은 quote
+    if (expand_leading_quotes_if_any(in, out)) return;
+
+    const Token& t = in.peek();
+    if (t.kind == TK_LPAREN) {
+        (void)in.next(); // '(' 소비
+
+        // define sugar?
+        if (in.hasMore() && in.peek().kind == TK_SYMBOL && in.peek().lexeme == "define") {
+            (void)in.next(); // 'define' 소비(출력은 expand_define_sugar 내에서)
+            expand_define_sugar(in, out);
+            return;
+        }
+
+        // 일반 리스트
+        out.emit_l();
+        while (in.hasMore() && in.peek().kind != TK_RPAREN) {
+            expand_form(in, out);
+        }
+        if (!in.hasMore() || in.peek().kind != TK_RPAREN)
+            throw std::runtime_error("syntax: expected ')'");
+        (void)in.next(); // ')'
+        out.emit_r();
+        return;
+    }
+
+    if (t.kind == TK_RPAREN) {
+        // 상위에서 처리할 닫는 괄호이므로 여기선 건드리지 않음
+        return;
+    }
+
+    // 원자
+    out.emit_sym(in.next().lexeme);
+}
+
+static bool expand_single_quote_token_if_any(TokenStream& in, Out& out) {
+    if (!in.hasMore()) return false;
+    const Token& t = in.peek();
+    if (t.kind == TK_SYMBOL && t.lexeme == "'") {
+        (void)in.next();
+        out.emit_l(); out.emit_sym("quote");
+        expand_form(in, out);
+        out.emit_r();
+        return true;
+    }
+    return false;
+}
+
+static bool expand_leading_quotes_if_any(TokenStream& in, Out& out) {
+    if (!in.hasMore()) return false;
+    const Token& t = in.peek();
+    if (t.kind != TK_SYMBOL) return false;
+
+    const std::string& s = t.lexeme;
+    if (s.empty() || s[0] != '\'') return false;
+
+    int q = 0;
+    while (q < (int)s.size() && s[q] == '\'') ++q;
+    std::string rest = s.substr(q);
+    (void)in.next(); // 현재 토큰 소비
+
+    for (int i = 0; i < q; ++i) { out.emit_l(); out.emit_sym("quote"); }
+
+    if (!rest.empty()) {
+        out.emit_sym(rest); // 원자 인용
+    } else {
+        // 다음 폼 전체 인용
+        expand_form(in, out);
+    }
+
+    for (int i = 0; i < q; ++i) out.emit_r();
+    return true;
+}
+
+static void expand_define_sugar(TokenStream& in, Out& out) {
+    // 외부 '('는 expand_form 에서 이미 출력했으므로,
+    // 여기서 새로운 '(define ...' 을 직접 출력한다.
+    out.emit_l();
+    out.emit_sym("define");
+
+    if (in.hasMore() && in.peek().kind == TK_LPAREN) {
+        // ----- 함수형 define -----
+        (void)in.next(); // '('
+        if (!in.hasMore() || in.peek().kind != TK_SYMBOL)
+            throw std::runtime_error("syntax: expected function name in define");
+        std::string fname = in.next().lexeme;
+
+        // params: 고정 길이 배열 사용
+        std::string params[64];
+        int pcount = 0;
+
+        while (in.hasMore() && in.peek().kind != TK_RPAREN) {
+            if (in.peek().kind != TK_SYMBOL)
+                throw std::runtime_error("syntax: parameter must be symbol");
+            if (pcount < 64) params[pcount++] = in.next().lexeme;
+            else (void)in.next(); // 넘치면 조용히 버림(필요시 에러로 바꿔도 좋음)
+        }
+        if (!in.hasMore() || in.peek().kind != TK_RPAREN)
+            throw std::runtime_error("syntax: expected ')' after parameter list");
+        (void)in.next(); // consume ')'
+
+        // 출력: 함수명 + (lambda (params...) body...)
+        out.emit_sym(fname);
+        out.emit_l(); out.emit_sym("lambda");
+        out.emit_l();
+        for (int i = 0; i < pcount; ++i) out.emit_sym(params[i]);
+        out.emit_r(); // params 닫기
+
+        // body 전개: define 닫는 ')' 전까지 여러 form 가능
+        while (in.hasMore() && in.peek().kind != TK_RPAREN) {
+            expand_form(in, out);
+        }
+        if (!in.hasMore() || in.peek().kind != TK_RPAREN)
+            throw std::runtime_error("syntax: expected ')' to close define");
+        (void)in.next(); // consume ')'
+
+        out.emit_r(); // lambda 닫기
+        out.emit_r(); // define 닫기
+    } else {
+        // ----- 변수형 define -----
+        if (!in.hasMore() || in.peek().kind != TK_SYMBOL)
+            throw std::runtime_error("syntax: expected name after define");
+        out.emit_sym(in.next().lexeme); // name
+
+        if (!in.hasMore())
+            throw std::runtime_error("syntax: expected value after define name");
+        // value form 전개
+        expand_form(in, out);
+
+        // 원래 define 닫는 ')'
+        if (!in.hasMore() || in.peek().kind != TK_RPAREN)
+            throw std::runtime_error("syntax: expected ')' to close define");
+        (void)in.next(); // consume ')'
+        out.emit_r();    // define 닫기
+    }
+}
+
+void preprocess(TokenStream& ts) {
+#if DEBUG_PREPROCESS
+    // BEFORE 스냅샷
+    Token before[512];
+    int   before_count = ts.count;
+    int   before_pos   = ts.pos;
+    for (int i = 0; i < before_count; ++i) before[i] = ts.toks[i];
+    // 바로 출력(원하면 여기서 dump_ts 호출)
+    {
+        TokenStream tmp;
+        for (int i = 0; i < before_count; ++i) tmp.toks[i] = before[i];
+        tmp.count = before_count; tmp.pos = before_pos;
+        dump_ts("BEFORE", tmp);
+    }
+#endif
+
+    Out out;
+    while (ts.hasMore()) {
+        expand_form(ts, out);
+    }
+
+    // 결과 ts로 복사
+    ts.clear();
+    int limit = out.count;
+    if (limit > 512) limit = 512;
+    for (int i = 0; i < limit; ++i) ts.toks[i] = out.buf[i];
+    ts.count = limit;
+    ts.reset();
+
+#if DEBUG_PREPROCESS
+    dump_ts("AFTER", ts);
+#endif
+}
+
 
 void tokenize_line(const std::string& line, TokenStream& ts) {
     ts.clear();
@@ -151,4 +337,15 @@ static void free_tree_rec(int root, NodeArray& na) {
 
 void free_parse_tree(int root, NodeArray& na) {
     free_tree_rec(root, na);
+}
+
+void dump_ts(const char* tag, const TokenStream& ts) {
+    std::printf("[TokenStream %s] count=%d pos=%d\n", tag, ts.count, ts.pos);
+    for (int i = 0; i < ts.count; ++i) {
+        const Token& t = ts.toks[i];
+        const char* k =
+            (t.kind == TK_LPAREN) ? "LPAREN" :
+            (t.kind == TK_RPAREN) ? "RPAREN" : "SYMBOL";
+        std::printf("  %3d: %-6s \"%s\"\n", i, k, t.lexeme.c_str());
+    }
 }
