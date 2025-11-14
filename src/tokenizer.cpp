@@ -28,41 +28,35 @@ static void expand_define_sugar(TokenStream& in, Out& out);
 static void expand_form(TokenStream& in, Out& out) {
     if (!in.hasMore()) return;
 
-    // 1) 단독 quote
     if (expand_single_quote_token_if_any(in, out)) return;
 
-    // 2) 붙은 quote
     if (expand_leading_quotes_if_any(in, out)) return;
 
     const Token& t = in.peek();
     if (t.kind == TK_LPAREN) {
-        (void)in.next(); // '(' 소비
+        (void)in.next();
 
-        // define sugar?
         if (in.hasMore() && in.peek().kind == TK_SYMBOL && in.peek().lexeme == "define") {
-            (void)in.next(); // 'define' 소비(출력은 expand_define_sugar 내에서)
+            (void)in.next();
             expand_define_sugar(in, out);
             return;
         }
 
-        // 일반 리스트
         out.emit_l();
         while (in.hasMore() && in.peek().kind != TK_RPAREN) {
             expand_form(in, out);
         }
         if (!in.hasMore() || in.peek().kind != TK_RPAREN)
             throw std::runtime_error("syntax: expected ')'");
-        (void)in.next(); // ')'
+        (void)in.next();
         out.emit_r();
         return;
     }
 
     if (t.kind == TK_RPAREN) {
-        // 상위에서 처리할 닫는 괄호이므로 여기선 건드리지 않음
         return;
     }
 
-    // 원자
     out.emit_sym(in.next().lexeme);
 }
 
@@ -95,9 +89,8 @@ static bool expand_leading_quotes_if_any(TokenStream& in, Out& out) {
     for (int i = 0; i < q; ++i) { out.emit_l(); out.emit_sym("quote"); }
 
     if (!rest.empty()) {
-        out.emit_sym(rest); // 원자 인용
+        out.emit_sym(rest);
     } else {
-        // 다음 폼 전체 인용
         expand_form(in, out);
     }
 
@@ -106,19 +99,15 @@ static bool expand_leading_quotes_if_any(TokenStream& in, Out& out) {
 }
 
 static void expand_define_sugar(TokenStream& in, Out& out) {
-    // 외부 '('는 expand_form 에서 이미 출력했으므로,
-    // 여기서 새로운 '(define ...' 을 직접 출력한다.
     out.emit_l();
     out.emit_sym("define");
 
     if (in.hasMore() && in.peek().kind == TK_LPAREN) {
-        // ----- 함수형 define -----
-        (void)in.next(); // '('
+        (void)in.next();
         if (!in.hasMore() || in.peek().kind != TK_SYMBOL)
             throw std::runtime_error("syntax: expected function name in define");
         std::string fname = in.next().lexeme;
 
-        // params: 고정 길이 배열 사용
         std::string params[64];
         int pcount = 0;
 
@@ -126,56 +115,49 @@ static void expand_define_sugar(TokenStream& in, Out& out) {
             if (in.peek().kind != TK_SYMBOL)
                 throw std::runtime_error("syntax: parameter must be symbol");
             if (pcount < 64) params[pcount++] = in.next().lexeme;
-            else (void)in.next(); // 넘치면 조용히 버림(필요시 에러로 바꿔도 좋음)
+            else (void)in.next();
         }
         if (!in.hasMore() || in.peek().kind != TK_RPAREN)
             throw std::runtime_error("syntax: expected ')' after parameter list");
-        (void)in.next(); // consume ')'
+        (void)in.next();
 
-        // 출력: 함수명 + (lambda (params...) body...)
         out.emit_sym(fname);
         out.emit_l(); out.emit_sym("lambda");
         out.emit_l();
         for (int i = 0; i < pcount; ++i) out.emit_sym(params[i]);
-        out.emit_r(); // params 닫기
+        out.emit_r();
 
-        // body 전개: define 닫는 ')' 전까지 여러 form 가능
         while (in.hasMore() && in.peek().kind != TK_RPAREN) {
             expand_form(in, out);
         }
         if (!in.hasMore() || in.peek().kind != TK_RPAREN)
             throw std::runtime_error("syntax: expected ')' to close define");
-        (void)in.next(); // consume ')'
+        (void)in.next();
 
-        out.emit_r(); // lambda 닫기
-        out.emit_r(); // define 닫기
+        out.emit_r();
+        out.emit_r();
     } else {
-        // ----- 변수형 define -----
         if (!in.hasMore() || in.peek().kind != TK_SYMBOL)
             throw std::runtime_error("syntax: expected name after define");
-        out.emit_sym(in.next().lexeme); // name
+        out.emit_sym(in.next().lexeme);
 
         if (!in.hasMore())
             throw std::runtime_error("syntax: expected value after define name");
-        // value form 전개
         expand_form(in, out);
 
-        // 원래 define 닫는 ')'
         if (!in.hasMore() || in.peek().kind != TK_RPAREN)
             throw std::runtime_error("syntax: expected ')' to close define");
-        (void)in.next(); // consume ')'
-        out.emit_r();    // define 닫기
+        (void)in.next();
+        out.emit_r();
     }
 }
 
 void preprocess(TokenStream& ts) {
 #if DEBUG_PREPROCESS
-    // BEFORE 스냅샷
     Token before[512];
     int   before_count = ts.count;
     int   before_pos   = ts.pos;
     for (int i = 0; i < before_count; ++i) before[i] = ts.toks[i];
-    // 바로 출력(원하면 여기서 dump_ts 호출)
     {
         TokenStream tmp;
         for (int i = 0; i < before_count; ++i) tmp.toks[i] = before[i];
@@ -183,13 +165,11 @@ void preprocess(TokenStream& ts) {
         dump_ts("BEFORE", tmp);
     }
 #endif
-
     Out out;
     while (ts.hasMore()) {
         expand_form(ts, out);
     }
 
-    // 결과 ts로 복사
     ts.clear();
     int limit = out.count;
     if (limit > 512) limit = 512;
@@ -298,12 +278,12 @@ static void print_atom(int index, const HashTable& ht) {
 static void print_expr(int root, bool startList, const HashTable& ht, const NodeArray& na) {
     if (root == 0) {
         std::printf("()");
-        if (startList) std::printf("\n");
+        // if (startList) std::printf("\n");
         return;
     }
     if (root < 0) {
         print_atom(root, ht);
-        if (startList) std::printf("\n");
+        // if (startList) std::printf("\n");
         return;
     }
     const node_t* tbl = na.getTable();

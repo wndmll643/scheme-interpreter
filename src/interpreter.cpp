@@ -47,6 +47,7 @@ int main() {
 
             if (!suppress_output) {
                 PRINT(val, *ht, *na);
+                std::printf("\n");
             }
             else {
             }

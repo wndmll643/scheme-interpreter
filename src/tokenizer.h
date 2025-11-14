@@ -26,11 +26,11 @@ typedef struct TokenStream {
 } TokenStream;
 
 typedef struct Out {
-    Token buf[2048]; // 임시로 넉넉히 확보
+    Token buf[2048];
     int   count = 0;
 
     void emit(TokKind k, const std::string& s) {
-        if (count >= 2048) return; // 안전하게 트렁케이트
+        if (count >= 2048) return;
         buf[count].kind = k;
         buf[count].lexeme = s;
         ++count;
