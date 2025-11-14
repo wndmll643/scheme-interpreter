@@ -1,8 +1,23 @@
 #include "tokenizer.h"
 #include "table.h"
+#include "node.h"
 #include "eval.h"
 #include <cstdio>
 #include <iostream>
+#include <string>
+
+static inline bool is_list(int n)   { return n > 0; }
+static inline bool is_symbol(int n) { return n < 0; }
+static inline int  CAR(const NodeArray& na, int p){ return na.getTable()[p].lchild; }
+
+static const std::string* sym_name(const HashTable& ht, int sym_idx){
+    return ht.nameByIndex(sym_idx);
+}
+static inline bool is_sym_name(const HashTable& ht, int sym, const char* name){
+    if (!is_symbol(sym)) return false;
+    const std::string* s = sym_name(ht, sym);
+    return (s && *s == name);
+}
 
 int main() {
     HashTable* ht = _init_HashTable(101);
@@ -16,30 +31,28 @@ int main() {
         if (line == "exit") break;
 
         TokenStream ts;
-        tokenize_line(line, ts);
-        preprocess(ts);
-        int root = parse_and_build(ts, *ht, *na);
+        int root = 0;
+        try {
+            tokenize_line(line, ts);
+            preprocess(ts);
+            root = parse_and_build(ts, *ht, *na);
 
-        // TODO: now we have to evaluate the parse tree to do some work
+            bool suppress_output = false;
+            if (is_list(root)) {
+                int op = CAR(*na, root);
+                if (is_sym_name(*ht, op, "define")) suppress_output = true;
+            }
 
-        std::printf("] ");
-        PRINT(root, *ht, *na);
-        std::printf("\n");
-        // std::printf("Free list's root = %d\n", na->getFreeRoot());
-        // std::printf("Parse tree's root = %d\n\n", root);
+            int val = EVAL(root, *ht, *na);
 
-        // na->printTable();
-        // std::printf("\n");
-        // ht->printTable();
-        // std::printf("\n");
-
-        int val = EVAL(root, *ht, *na);
-        // there should be a way to divide if output is
-        // 1) from definition of a function or variable
-        // 2) from evaluation of an expression
-        // std::printf("val = %d\n", val);
-        PRINT(val, *ht, *na);
-        std::printf("\n");
+            if (!suppress_output) {
+                PRINT(val, *ht, *na);
+            }
+            else {
+            }
+        } catch (const std::exception& e) {
+            std::fprintf(stderr, "error: %s\n", e.what());
+        }
 
         if (root > 0) free_parse_tree(root, *na);
     }
