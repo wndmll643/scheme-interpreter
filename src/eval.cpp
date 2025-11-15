@@ -27,9 +27,11 @@ static inline bool is_sym_name(const HashTable& ht, int sym, const char* name){
     const std::string* s = sym_name(ht, sym);
     return (s && *s == name);
 }
+
 static inline bool is_truthy(const HashTable& ht, int v){
     return !(v==NIL() || is_sym_name(ht, v, "#f"));
 }
+
 static long long read_number(const HashTable& ht, int sym){
     const std::string* s = sym_name(ht, sym);
     if (!s || s->empty()) return 0;
@@ -52,7 +54,9 @@ static double read_double(const HashTable& ht, int sym){
 }
 
 static int list_length(const NodeArray& na, int lst){
-    int n=0; while(is_list(lst)){ ++n; lst = cdr(na, lst); } return n;
+    int n = 0; 
+    while (is_list(lst)) { ++n; lst = cdr(na, lst); } 
+    return n;
 }
 
 static int deep_copy(int n, NodeArray& na){
@@ -118,9 +122,9 @@ int EVAL(int root, HashTable& ht, NodeArray& na){
     if (is_sym_name(ht, op, "cons")) {
         if (list_length(na, args) != 2) throw std::runtime_error("cons: arity mismatch");
         int a = EVAL(car(na, args), ht, na);
-        int d = EVAL(car(na, cdr(na, args)), ht, na);
-        if (!(d == NIL() || is_list(d))) throw std::runtime_error("cons: second arg must be list");
-        return cons(na, a, d);
+        int list = EVAL(car(na, cdr(na, args)), ht, na);
+        if (!(list == NIL() || is_list(list))) throw std::runtime_error("cons: second arg must be list");
+        return cons(na, a, list);
     }
 
     if (is_sym_name(ht, op, "car") || is_sym_name(ht, op, "cdr")) {
