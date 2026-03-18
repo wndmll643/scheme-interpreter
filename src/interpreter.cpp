@@ -22,7 +22,7 @@ int main() {
         std::printf("\n");
         std::printf("Free list's root = %d\n", na->getFreeRoot());
         std::printf("Parse tree's root = %d\n\n", root);
-
+        
         na->printTable();
         std::printf("\n");
         ht->printTable();
@@ -33,3 +33,4 @@ int main() {
     delete ht; delete na;
     return 0;
 }
+
